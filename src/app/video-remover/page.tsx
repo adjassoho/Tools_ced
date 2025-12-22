@@ -33,35 +33,47 @@ export default function VideoRemover() {
         if (!file) return;
         
         setVideoFile(file);
-        setVideoUrl(URL.createObjectURL(file));
+        const url = URL.createObjectURL(file);
+        setVideoUrl(url);
         setFrame(null);
         setResult(null);
         setError(null);
         setSelectionBox(null);
         
-        // Extraire une frame
+        // Extraire une frame côté client avec canvas
         setIsExtracting(true);
         setProgress("Extraction d'une frame...");
         
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('action', 'extract-frame');
+            const video = document.createElement('video');
+            video.src = url;
+            video.crossOrigin = 'anonymous';
+            video.muted = true;
             
-            const response = await fetch('/api/process-video', {
-                method: 'POST',
-                body: formData
+            await new Promise<void>((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    video.currentTime = 1; // Aller à 1 seconde
+                };
+                video.onseeked = () => resolve();
+                video.onerror = () => reject(new Error('Erreur de chargement vidéo'));
+                setTimeout(() => reject(new Error('Timeout')), 10000);
             });
             
-            const data = await response.json();
+            // Créer un canvas pour capturer la frame
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
             
-            if (data.error) {
-                throw new Error(data.error);
-            }
+            if (!ctx) throw new Error('Canvas non supporté');
             
-            setFrame(data.frame);
-            setFrameSize({ width: data.width, height: data.height });
+            ctx.drawImage(video, 0, 0);
+            const frameDataUrl = canvas.toDataURL('image/png');
+            
+            setFrame(frameDataUrl);
+            setFrameSize({ width: video.videoWidth, height: video.videoHeight });
             setProgress("");
+            
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erreur d'extraction");
         } finally {
@@ -136,28 +148,27 @@ export default function VideoRemover() {
 
 
     const processVideo = async () => {
-        if (!videoFile || !selectionBox) return;
+        if (!frame || !selectionBox) return;
         
         setIsProcessing(true);
         setError(null);
-        setProgress("Traitement en cours...");
+        setProgress("Traitement de la frame...");
         
         try {
-            setProgress("Envoi de la vidéo...");
-            
+            // Envoyer la frame pour traitement
             const formData = new FormData();
-            formData.append('file', videoFile);
-            formData.append('action', 'process');
+            formData.append('action', 'process-frame');
+            formData.append('frame', frame);
             formData.append('box', JSON.stringify(selectionBox));
+            formData.append('width', frameSize.width.toString());
+            formData.append('height', frameSize.height.toString());
             
-            setProgress("Suppression du filigrane (1 appel API)...");
+            setProgress("Suppression du filigrane...");
             
             const response = await fetch('/api/process-video', {
                 method: 'POST',
                 body: formData
             });
-            
-            setProgress("Reconstruction de la vidéo...");
             
             const data = await response.json();
             
@@ -165,7 +176,9 @@ export default function VideoRemover() {
                 throw new Error(data.error);
             }
             
-            setResult(data.video);
+            // Pour l'instant, on affiche juste la frame traitée
+            // Le traitement vidéo complet nécessiterait FFmpeg
+            setResult(data.processedFrame);
             setProgress("Terminé !");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erreur de traitement");
@@ -274,18 +287,25 @@ export default function VideoRemover() {
                 </div>
             ) : (
                 <div>
-                    <div className="preview-box" style={{ aspectRatio: '16/9', marginBottom: '32px' }}>
-                        <video src={result} controls style={{ width: '100%', height: '100%' }} />
+                    <p style={{ marginBottom: '16px', color: 'var(--accent-green)', textAlign: 'center' }}>
+                        ✅ Filigrane supprimé avec succès !
+                    </p>
+                    <div className="preview-box" style={{ marginBottom: '32px' }}>
+                        <img src={result} alt="Frame traitée" style={{ width: '100%', height: 'auto' }} />
                     </div>
                     
                     <div className="button-group">
                         <button className="btn btn-secondary" onClick={reset}>
                             Nouvelle vidéo
                         </button>
-                        <a href={result} download="video-sans-filigrane.mp4" className="btn btn-primary">
-                            Télécharger
+                        <a href={result} download="frame-sans-filigrane.png" className="btn btn-primary">
+                            Télécharger l'image
                         </a>
                     </div>
+                    
+                    <p style={{ marginTop: '24px', fontSize: '14px', color: '#888', textAlign: 'center' }}>
+                        💡 Note: Le traitement vidéo complet nécessite FFmpeg. Cette version traite une frame de démonstration.
+                    </p>
                 </div>
             )}
         </div>

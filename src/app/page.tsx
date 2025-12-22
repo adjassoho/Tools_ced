@@ -60,6 +60,61 @@ export default function Home() {
             Lancer l'outil <span>→</span>
           </div>
         </Link>
+
+        <Link href="/document-summary" className="feature-card">
+          <div className="feature-icon">📄</div>
+          <h3 className="feature-title">Résumé Intelligent</h3>
+          <p className="feature-description">
+            Analyse et résumé automatique de documents par chapitre et section grâce à l'IA.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
+
+        <Link href="/quiz-generator" className="feature-card">
+          <div className="feature-icon">🎯</div>
+          <h3 className="feature-title">Générateur de Quiz</h3>
+          <p className="feature-description">
+            Créez automatiquement des quiz interactifs à partir de vos documents pour tester vos connaissances.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
+
+        <Link href="/tp-generator" className="feature-card">
+          <div className="feature-icon">📋</div>
+          <h3 className="feature-title">Générateur de TP</h3>
+          <p className="feature-description">
+            Générez automatiquement des fiches de Travaux Pratiques structurées à partir de vos cours.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
+
+        <Link href="/td-generator" className="feature-card">
+          <div className="feature-icon">📝</div>
+          <h3 className="feature-title">Générateur de TD</h3>
+          <p className="feature-description">
+            Créez des Travaux Dirigés avec exercices et espaces de réponse à partir de vos documents.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
+
+        <Link href="/image-generator" className="feature-card">
+          <div className="feature-icon">🎨</div>
+          <h3 className="feature-title">Générateur d'Images</h3>
+          <p className="feature-description">
+            Créez des illustrations africaines en lien avec le contenu de vos documents.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
       </section>
     </div>
   );

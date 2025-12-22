@@ -111,9 +111,56 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData();
         const action = formData.get('action') as string;
         
-        // Action: Traiter une frame unique (le client gère l'extraction et la reconstruction)
+        console.log('Video API - Action:', action);
+        
+        // Action: Extraire une frame de la vidéo
+        if (action === 'extract-frame') {
+            const file = formData.get('file') as File;
+            
+            if (!file) {
+                return NextResponse.json({ error: 'Fichier vidéo requis' }, { status: 400 });
+            }
+            
+            console.log('Extracting frame from:', file.name, file.size, 'bytes');
+            
+            // Pour l'extraction de frame, on utilise une approche côté client
+            // On retourne juste les infos pour que le client extraie la frame
+            return NextResponse.json({
+                message: 'Extraction côté client requise',
+                needsClientExtraction: true,
+                success: true
+            });
+        }
+        
+        // Action: Traiter la vidéo complète
+        if (action === 'process') {
+            const file = formData.get('file') as File;
+            const boxString = formData.get('box') as string;
+            
+            if (!file || !boxString) {
+                return NextResponse.json({ error: 'Fichier et zone requis' }, { status: 400 });
+            }
+            
+            const box: BoxCoordinates = JSON.parse(boxString);
+            const apiKey = process.env.PICWISH_API_KEY;
+            
+            if (!apiKey) {
+                return NextResponse.json({ error: 'PICWISH_API_KEY non configuré' }, { status: 500 });
+            }
+            
+            console.log('Processing video with box:', box);
+            
+            // Pour le traitement vidéo complet, on a besoin de FFmpeg
+            // Retourner une erreur explicative pour l'instant
+            return NextResponse.json({ 
+                error: 'Le traitement vidéo nécessite FFmpeg. Utilisez le traitement frame par frame côté client.',
+                needsClientProcessing: true
+            }, { status: 400 });
+        }
+        
+        // Action: Traiter une frame unique
         if (action === 'process-frame') {
-            const frameData = formData.get('frame') as string; // base64
+            const frameData = formData.get('frame') as string;
             const boxString = formData.get('box') as string;
             const widthStr = formData.get('width') as string;
             const heightStr = formData.get('height') as string;
@@ -133,18 +180,13 @@ export async function POST(req: NextRequest) {
             
             console.log('Processing frame with box:', box);
             
-            // Décoder la frame base64
             const base64Data = frameData.replace(/^data:image\/\w+;base64,/, '');
             const frameBuffer = Buffer.from(base64Data, 'base64');
-            
-            // Créer le masque
             const maskBuffer = createMaskPNG(width, height, box);
             
-            // Traiter avec PicWish
             console.log('Calling PicWish...');
             const processedUrl = await processFrameWithPicWish(frameBuffer, maskBuffer, apiKey);
             
-            // Télécharger l'image traitée
             const response = await fetch(processedUrl);
             const processedBuffer = Buffer.from(await response.arrayBuffer());
             const processedBase64 = processedBuffer.toString('base64');
@@ -155,7 +197,7 @@ export async function POST(req: NextRequest) {
             });
         }
         
-        return NextResponse.json({ error: 'Action non reconnue' }, { status: 400 });
+        return NextResponse.json({ error: `Action non reconnue: ${action}` }, { status: 400 });
         
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
