@@ -7,7 +7,7 @@ export default function Home() {
       <section className="hero">
         <div className="hero-badge">
           <span className="hero-badge-dot"></span>
-          Institut National de l'Entreprenariat
+          Institut National de l'Eau
         </div>
 
         <h1 className="hero-title">
@@ -115,6 +115,28 @@ export default function Home() {
             Lancer l'outil <span>→</span>
           </div>
         </Link>
+
+        <a href="https://gamma.app" target="_blank" rel="noopener noreferrer" className="feature-card external-card">
+          <div className="feature-icon">📊</div>
+          <h3 className="feature-title">Gamma - PowerPoint IA</h3>
+          <p className="feature-description">
+            Générez des présentations PowerPoint professionnelles automatiquement avec l'IA.
+          </p>
+          <div className="feature-link">
+            Ouvrir Gamma <span>↗</span>
+          </div>
+        </a>
+
+        <a href="https://notebooklm.google.com" target="_blank" rel="noopener noreferrer" className="feature-card external-card">
+          <div className="feature-icon">🎥</div>
+          <h3 className="feature-title">NotebookLM - Vidéos IA</h3>
+          <p className="feature-description">
+            Créez des vidéos explicatives et podcasts audio à partir de vos documents avec Google AI.
+          </p>
+          <div className="feature-link">
+            Ouvrir NotebookLM <span>↗</span>
+          </div>
+        </a>
       </section>
     </div>
   );
