@@ -116,6 +116,17 @@ export default function Home() {
           </div>
         </Link>
 
+        <Link href="/lip-sync" className="feature-card">
+          <div className="feature-icon">🎭</div>
+          <h3 className="feature-title">Lip Sync Avatar</h3>
+          <p className="feature-description">
+            Transformez une photo en vidéo parlante avec synchronisation des lèvres sur votre audio.
+          </p>
+          <div className="feature-link">
+            Lancer l'outil <span>→</span>
+          </div>
+        </Link>
+
         <a href="https://gamma.app" target="_blank" rel="noopener noreferrer" className="feature-card external-card">
           <div className="feature-icon">📊</div>
           <h3 className="feature-title">Gamma - PowerPoint IA</h3>

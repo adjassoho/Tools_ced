@@ -1,84 +1,87 @@
 const fs = require('fs');
-require('dotenv').config({ path: '.env.local' });
 
-console.log('Test Hugging Face Spaces - XTTS Voice Cloning...');
+');
 
-// Liste des spaces XTTS disponibles
+nnels
 const SPACES = [
-    'https://coqui-xtts.hf.space',
-    'https://tts-xtts.hf.space', 
-    'https://mrfakename-xtts.hf.space'
+    { name: 'Whi
+    { name: 'Parler TTS', url: 'ht
+    { name: 'MeloTTS', url: 'http.space' },
+    { name: 'OpenVoice', url: 'https:/
+  ' },
+
 ];
 
-async function findWorkingSpace() {
-    console.log('\nSearching for working XTTS space...\n');
+asyn{
+    console.log('\nTesting availa);
+    
+    const working = [];
     
     for (const space of SPACES) {
         try {
-            console.log(`Testing ${space}...`);
-            const response = await fetch(`${space}/api/predict`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data: [] })
+            process.stdout.write(`Testing ${space.e}... `);
+            
+            r();
+            const timeout = setTimeout(() => controller.
+            
+            const response = await fetch(space.url, {
+                signal: controller.signal
             });
             
-            console.log(`  Status: ${response.status}`);
+            clearTimeout(timeout);
             
-            if (response.status === 200 || response.status === 422) {
-                console.log(`  ✅ Space is responding!`);
-                
-                // Essayer de récupérer les infos
-                const infoResponse = await fetch(`${space}/info`);
-                if (infoResponse.ok) {
-                    const info = await infoResponse.json();
-                    console.log(`  API: ${info.api ? 'Available' : 'Not available'}`);
-                }
-                
-                return space;
+            if (response.ok) {
+                console.log(`✅ Online (${response.status})`);
+                wace);
+            } el{
+                console.log(`}`);
             }
         } catch (e) {
-            console.log(`  ❌ Error: ${e.message}`);
-        }
-    }
+            if (e.name === 'AbortError') {
+         
+     
+    `);
+            }
+ 
+   }
     
-    return null;
-}
-
-async function testGradioClient() {
-    console.log('\n--- Test with @gradio/client ---\n');
+    console.log('\n--- Working Spaces ---');
     
-    try {
-        // Tester si le package est installé
-        const { Client } = require('@gradio/client');
-        console.log('Gradio client available');
-        
-        // Se connecter à un space XTTS
-        console.log('Connecting to XTTS space...');
-        const client = await Client.connect("coqui/xtts");
-        
-        console.log('Connected! API info:');
-        console.log(client.view_api());
-        
-    } catch (e) {
-        if (e.code === 'MODULE_NOT_FOUND') {
-            console.log('Gradio client not installed.');
-            console.log('Install with: npm install @gradio/client');
-        } else {
-            console.log('Error:', e.message);
-        }
-    }
-}
-
-async function main() {
-    const workingSpace = await findWorkingSpace();
-    
-    if (workingSpace) {
-        console.log(`\n✅ Found working space: ${workingSpace}`);
+        w));
     } else {
-        console.log('\n❌ No working space found');
+        console.log('No spaces currently available');
     }
     
-    await testGradioClient();
+    return working;
 }
 
-main();
+async fu) {
+    console.log('\n--- Testing OpenVoice Spa);
+    
+    try 
+        const rest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ll]
+            })
+        });
+        
+ );
+;
+        console.log('Re));
+        
+    h (e) {
+        console.log('Er
+    }
+}
+
+asyncn main() {
+    s();
+    
+ 
+
+    }
+
+
+main();}
