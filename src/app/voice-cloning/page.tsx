@@ -151,13 +151,33 @@ export default function VoiceCloning() {
     return (
         <div className="container">
             <header className="page-header">
-                <div className="page-badge">Synthèse Neuronale</div>
+                <div className="page-badge">Clonage IA Avancé</div>
                 <h1 className="page-title">Symphonie <span className="highlight">Vocale</span></h1>
                 <p className="page-description">
-                    Clonez n'importe quelle voix et générez des audios personnalisés. 
-                    Importez un échantillon ou enregistrez directement votre voix.
+                    Clonez n'importe quelle voix avec l'IA F5-TTS. 
+                    Importez un échantillon audio (6+ secondes) ou enregistrez directement votre voix.
                 </p>
             </header>
+
+            {/* Info Banner */}
+            <div style={{
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1))',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+            }}>
+                <span style={{ fontSize: '24px' }}>🎯</span>
+                <div>
+                    <strong style={{ color: '#10b981' }}>Vrai clonage vocal !</strong>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>
+                        Votre échantillon audio sera utilisé pour reproduire fidèlement la voix.
+                    </span>
+                </div>
+            </div>
 
             {/* Mode Selector */}
             <div style={{
