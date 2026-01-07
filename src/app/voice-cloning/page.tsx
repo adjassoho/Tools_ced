@@ -224,18 +224,49 @@ export default function VoiceCloning() {
                 </div>
             )}
 
-            <div className="voice-grid">
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: '32px',
+                marginBottom: '48px'
+            }}>
                 {/* Step 1: Voice Sample */}
                 <div>
-                    <div className="voice-step">
-                        <div className="step-number">1</div>
-                        <div className="step-title">Échantillon Vocal</div>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '16px'
+                    }}>
+                        <div style={{
+                            width: '36px',
+                            height: '36px',
+                            background: 'linear-gradient(135deg, var(--primary), #8b5cf6)',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '14px'
+                        }}>1</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700 }}>Échantillon Vocal</div>
                     </div>
 
                     {inputMode === 'upload' ? (
                         // Upload Mode
                         !voiceSample ? (
-                            <label className="voice-upload" style={{ minHeight: '200px' }}>
+                            <label style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minHeight: '220px',
+                                background: 'var(--card-bg)',
+                                border: '2px dashed var(--border-color)',
+                                borderRadius: '16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s'
+                            }}>
                                 <div style={{ fontSize: '56px', marginBottom: '16px' }}>📂</div>
                                 <div style={{ fontWeight: 600, marginBottom: '8px', fontSize: '16px' }}>
                                     Glissez ou cliquez pour importer
@@ -428,9 +459,24 @@ export default function VoiceCloning() {
 
                 {/* Step 2: Text Input */}
                 <div>
-                    <div className="voice-step">
-                        <div className="step-number">2</div>
-                        <div className="step-title">Texte à Générer</div>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '16px'
+                    }}>
+                        <div style={{
+                            width: '36px',
+                            height: '36px',
+                            background: 'linear-gradient(135deg, var(--primary), #8b5cf6)',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '14px'
+                        }}>2</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700 }}>Texte à Générer</div>
                     </div>
 
                     <div style={{
