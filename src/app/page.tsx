@@ -127,16 +127,16 @@ export default function Home() {
           </div>
         </Link>
 
-        <a href="https://gamma.app" target="_blank" rel="noopener noreferrer" className="feature-card external-card">
+        <Link href="/ppt-generator" className="feature-card">
           <div className="feature-icon">📊</div>
-          <h3 className="feature-title">Gamma - PowerPoint IA</h3>
+          <h3 className="feature-title">Générateur PowerPoint</h3>
           <p className="feature-description">
-            Générez des présentations PowerPoint professionnelles automatiquement avec l'IA.
+            Créez des présentations PowerPoint professionnelles automatiquement à partir d'un sujet ou document.
           </p>
           <div className="feature-link">
-            Ouvrir Gamma <span>↗</span>
+            Lancer l'outil <span>→</span>
           </div>
-        </a>
+        </Link>
 
         <a href="https://notebooklm.google.com" target="_blank" rel="noopener noreferrer" className="feature-card external-card">
           <div className="feature-icon">🎥</div>

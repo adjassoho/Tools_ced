@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+test-styletts*.js
+test-ppt*.js
+test-presentation.pptx
