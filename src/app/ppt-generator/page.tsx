@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 const themes = [
+    { id: 'african', name: 'Africain 🌍', colors: ['#b45309', '#d97706', '#16a34a'] },
     { id: 'professional', name: 'Professionnel', colors: ['#1a365d', '#2c5282', '#3182ce'] },
     { id: 'modern', name: 'Moderne', colors: ['#6b46c1', '#805ad5', '#d53f8c'] },
     { id: 'nature', name: 'Nature', colors: ['#276749', '#38a169', '#48bb78'] },
@@ -16,9 +17,10 @@ export default function PptGenerator() {
     const [file, setFile] = useState<File | null>(null);
     const [topic, setTopic] = useState("");
     const [slideCount, setSlideCount] = useState(10);
-    const [selectedTheme, setSelectedTheme] = useState('professional');
+    const [selectedTheme, setSelectedTheme] = useState('african');
+    const [includeImages, setIncludeImages] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
-    const [result, setResult] = useState<{ pptx: string; title: string; slideCount: number } | null>(null);
+    const [result, setResult] = useState<{ pptx: string; title: string; slideCount: number; imagesGenerated?: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,6 +54,7 @@ export default function PptGenerator() {
             formData.append('slideCount', slideCount.toString());
             formData.append('theme', selectedTheme);
             formData.append('language', 'fr');
+            formData.append('includeImages', includeImages.toString());
 
             const response = await fetch('/api/generate-ppt', {
                 method: 'POST',
@@ -92,8 +95,8 @@ export default function PptGenerator() {
                 <div className="page-badge">Générateur IA</div>
                 <h1 className="page-title">PowerPoint <span className="highlight">Intelligent</span></h1>
                 <p className="page-description">
-                    Créez des présentations PowerPoint professionnelles automatiquement à partir 
-                    d'un document ou d'un simple sujet grâce à l'intelligence artificielle.
+                    Créez des présentations PowerPoint professionnelles avec des images africaines contextuelles,
+                    automatiquement à partir d'un document ou d'un simple sujet.
                 </p>
             </header>
 
@@ -432,6 +435,70 @@ export default function PptGenerator() {
                             ))}
                         </div>
                     </div>
+
+                    {/* Include Images Toggle */}
+                    <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                        <div 
+                            onClick={() => setIncludeImages(!includeImages)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 16px',
+                                background: includeImages ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+                                border: includeImages ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '20px' }}>🌍</span>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '14px' }}>Images africaines (FLUX)</div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        Illustrations haute qualité contextuelles
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{
+                                width: '44px',
+                                height: '24px',
+                                borderRadius: '12px',
+                                background: includeImages ? '#10b981' : 'var(--border-color)',
+                                position: 'relative',
+                                transition: 'all 0.2s'
+                            }}>
+                                <div style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    borderRadius: '50%',
+                                    background: 'white',
+                                    position: 'absolute',
+                                    top: '2px',
+                                    left: includeImages ? '22px' : '2px',
+                                    transition: 'all 0.2s',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                }} />
+                            </div>
+                        </div>
+                        {includeImages && (
+                            <div style={{
+                                marginTop: '8px',
+                                padding: '10px 12px',
+                                background: 'rgba(251, 191, 36, 0.1)',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                                color: '#b45309',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                <span>⏱️</span>
+                                La génération avec images prend plus de temps (~1-2 min)
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -494,7 +561,7 @@ export default function PptGenerator() {
                             PowerPoint Généré !
                         </div>
                         <div style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>
-                            {result.slideCount} slides • {result.title}
+                            {result.slideCount} slides {result.imagesGenerated ? `• ${result.imagesGenerated} images 🌍` : ''} • {result.title}
                         </div>
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                             <button
