@@ -15,7 +15,7 @@ function httpsRequest(options: https.RequestOptions, body?: string): Promise<{ s
             });
         });
         req.on('error', reject);
-        req.setTimeout(30000, () => {
+        req.setTimeout(60000, () => {
             req.destroy();
             reject(new Error('Request timeout'));
         });
@@ -35,45 +35,38 @@ async function audioToDataUrl(file: File | Blob): Promise<string> {
 // Télécharger l'audio résultat
 async function downloadAudio(url: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-        https.get(url, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302) {
-                const redirectUrl = res.headers.location;
-                if (redirectUrl) {
-                    https.get(redirectUrl, (redirectRes) => {
-                        const chunks: Buffer[] = [];
-                        redirectRes.on('data', chunk => chunks.push(chunk));
-                        redirectRes.on('end', () => resolve(Buffer.concat(chunks)));
-                        redirectRes.on('error', reject);
-                    }).on('error', reject);
-                    return;
+        const makeRequest = (targetUrl: string) => {
+            const urlObj = new URL(targetUrl);
+            https.get({
+                hostname: urlObj.hostname,
+                path: urlObj.pathname + urlObj.search,
+            }, (res) => {
+                if (res.statusCode === 301 || res.statusCode === 302) {
+                    const redirectUrl = res.headers.location;
+                    if (redirectUrl) {
+                        makeRequest(redirectUrl);
+                        return;
+                    }
                 }
-            }
-            
-            const chunks: Buffer[] = [];
-            res.on('data', chunk => chunks.push(chunk));
-            res.on('end', () => resolve(Buffer.concat(chunks)));
-            res.on('error', reject);
-        }).on('error', reject);
+                const chunks: Buffer[] = [];
+                res.on('data', chunk => chunks.push(chunk));
+                res.on('end', () => resolve(Buffer.concat(chunks)));
+                res.on('error', reject);
+            }).on('error', reject);
+        };
+        makeRequest(url);
     });
 }
 
-// Récupérer la dernière version du modèle XTTS-v2
-async function getLatestXTTSVersion(token: string): Promise<string> {
+// Récupérer la dernière version d'un modèle
+async function getLatestVersion(token: string, model: string): Promise<string | null> {
     const res = await httpsRequest({
         hostname: 'api.replicate.com',
-        path: '/v1/models/lucataco/xtts-v2/versions',
+        path: `/v1/models/${model}`,
         method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
     });
-    
-    if (res.status === 200 && res.data.results?.length > 0) {
-        return res.data.results[0].id;
-    }
-    
-    // Fallback version
-    return '684bc3855b37866c0c65add2ff39c78f3dea3f4ff103a436465326e0f438d55e';
+    return res.data.latest_version?.id || null;
 }
 
 export async function POST(req: NextRequest) {
@@ -81,6 +74,8 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData();
         const file = formData.get('file') as File | null;
         const text = formData.get('text') as string;
+        const expressivity = parseFloat(formData.get('expressivity') as string) || 0.4;
+        const model = (formData.get('model') as string) || 'chatterbox-fr'; // Default to French Chatterbox
 
         if (!text) {
             return NextResponse.json({ error: 'Texte requis' }, { status: 400 });
@@ -94,33 +89,74 @@ export async function POST(req: NextRequest) {
         
         if (!replicateToken) {
             return NextResponse.json({ 
-                error: 'Token Replicate non configuré. Ajoutez REPLICATE_API_TOKEN dans .env.local' 
+                error: 'Token Replicate non configuré' 
             }, { status: 500 });
         }
 
-        console.log('Starting voice cloning with XTTS-v2...');
-        console.log('Audio sample:', file.name, file.size, 'bytes');
-        console.log('Text length:', text.length, 'chars');
+        // Determine model name for display
+        let modelName: string;
+        let replicateModel: string;
+        let predBody: string;
 
-        // Convertir l'audio en data URL pour Replicate
         const audioDataUrl = await audioToDataUrl(file);
 
-        // Récupérer la dernière version du modèle
-        const version = await getLatestXTTSVersion(replicateToken);
-        console.log('Using XTTS-v2 version:', version);
-        
-        const predBody = JSON.stringify({
-            version: version,
-            input: {
-                text: text,
-                speaker: audioDataUrl,
-                language: 'fr'
-            }
-        });
+        console.log('Starting voice cloning...');
+        console.log('Model requested:', model);
+        console.log('Audio sample:', (file as File).name, file.size, 'bytes');
+        console.log('Text:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
+
+        if (model === 'xtts') {
+            // XTTS-v2 - bon support multilingue
+            modelName = 'XTTS-v2';
+            replicateModel = 'lucataco/xtts-v2';
+            const version = await getLatestVersion(replicateToken, replicateModel);
+            predBody = JSON.stringify({
+                version: version,
+                input: {
+                    text: text,
+                    speaker: audioDataUrl,
+                    language: 'fr'
+                }
+            });
+        } else if (model === 'chatterbox') {
+            // Chatterbox original (anglais)
+            modelName = 'Chatterbox';
+            replicateModel = 'resemble-ai/chatterbox';
+            predBody = JSON.stringify({
+                input: {
+                    prompt: text,
+                    audio_prompt: audioDataUrl,
+                    exaggeration: expressivity,
+                    cfg_weight: 0.9
+                }
+            });
+        } else {
+            // Chatterbox Multilingual (français) - DEFAULT
+            modelName = 'Chatterbox FR';
+            replicateModel = 'resemble-ai/chatterbox-multilingual';
+            const version = await getLatestVersion(replicateToken, replicateModel);
+            predBody = JSON.stringify({
+                version: version,
+                input: {
+                    text: text,
+                    audio_prompt: audioDataUrl,
+                    language: 'fr',
+                    exaggeration: expressivity,
+                    cfg_weight: 0.5
+                }
+            });
+        }
+
+        console.log('Using model:', modelName, '(' + replicateModel + ')');
+
+        // Determine API path
+        const apiPath = model === 'chatterbox' 
+            ? `/v1/models/${replicateModel}/predictions`
+            : '/v1/predictions';
 
         const predRes = await httpsRequest({
             hostname: 'api.replicate.com',
-            path: '/v1/predictions',
+            path: apiPath,
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${replicateToken}`,
@@ -133,23 +169,34 @@ export async function POST(req: NextRequest) {
 
         if (predRes.status === 402) {
             return NextResponse.json({ 
-                error: 'Crédit Replicate insuffisant. Rechargez votre compte sur replicate.com/account/billing'
+                error: 'Crédit Replicate insuffisant'
             }, { status: 402 });
         }
 
         if (predRes.status !== 201 && predRes.status !== 200) {
             console.error('Replicate error:', predRes.data);
             return NextResponse.json({ 
-                error: predRes.data.detail || 'Erreur lors de la création de la prédiction'
+                error: predRes.data.detail || predRes.data.error || 'Erreur lors de la création'
             }, { status: predRes.status });
         }
 
+        // Si le résultat est immédiat
+        if (predRes.data.status === 'succeeded' && predRes.data.output) {
+            const audioBuffer = await downloadAudio(predRes.data.output);
+            const base64Audio = audioBuffer.toString('base64');
+            return NextResponse.json({
+                audio: `data:audio/wav;base64,${base64Audio}`,
+                success: true,
+                model: modelName
+            });
+        }
+
+        // Polling pour le résultat
         const predictionId = predRes.data.id;
         console.log('Prediction ID:', predictionId);
 
-        // Polling pour le résultat (max 2 minutes)
         let attempts = 0;
-        const maxAttempts = 60;
+        const maxAttempts = 90; // 3 minutes max (Chatterbox Multilingual peut être lent)
         
         while (attempts < maxAttempts) {
             await new Promise(r => setTimeout(r, 2000));
@@ -158,29 +205,22 @@ export async function POST(req: NextRequest) {
                 hostname: 'api.replicate.com',
                 path: `/v1/predictions/${predictionId}`,
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${replicateToken}`,
-                }
+                headers: { 'Authorization': `Bearer ${replicateToken}` }
             });
 
             console.log(`Attempt ${attempts + 1}: ${statusRes.data.status}`);
 
             if (statusRes.data.status === 'succeeded') {
                 const outputUrl = statusRes.data.output;
-                console.log('Output URL:', outputUrl);
-
-                // Télécharger l'audio généré
                 const audioBuffer = await downloadAudio(outputUrl);
                 const base64Audio = audioBuffer.toString('base64');
 
                 return NextResponse.json({
                     audio: `data:audio/wav;base64,${base64Audio}`,
                     success: true,
-                    model: 'XTTS-v2',
-                    message: 'Voix clonée avec succès !'
+                    model: modelName
                 });
             } else if (statusRes.data.status === 'failed') {
-                console.error('Prediction failed:', statusRes.data.error);
                 return NextResponse.json({ 
                     error: statusRes.data.error || 'La génération a échoué'
                 }, { status: 500 });
@@ -190,7 +230,7 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ 
-            error: 'Timeout - la génération prend trop de temps. Réessayez.'
+            error: 'Timeout - la génération prend trop de temps'
         }, { status: 504 });
 
     } catch (error: unknown) {

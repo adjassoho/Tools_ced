@@ -15,12 +15,16 @@ export default function VoiceCloning() {
     const [recordingTime, setRecordingTime] = useState(0);
     const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
     const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const chunksRef = useRef<Blob[]>([]);
+    const isRecordingRef = useRef(false);
+    const audioChunksRef = useRef<Float32Array[]>([]);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     
     // Text & Generation
     const [text, setText] = useState("");
+    const [expressivity, setExpressivity] = useState(0.5);
+    const [selectedModel, setSelectedModel] = useState<'chatterbox-fr' | 'xtts' | 'chatterbox'>('chatterbox-fr');
     const [isCloning, setIsCloning] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -49,26 +53,93 @@ export default function VoiceCloning() {
         setSamplePreviewUrl(null);
     };
 
+    // Convertir AudioBuffer en WAV Blob
+    const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+        const numChannels = buffer.numberOfChannels;
+        const sampleRate = buffer.sampleRate;
+        const format = 1; // PCM
+        const bitDepth = 16;
+        
+        const bytesPerSample = bitDepth / 8;
+        const blockAlign = numChannels * bytesPerSample;
+        
+        const dataLength = buffer.length * blockAlign;
+        const bufferLength = 44 + dataLength;
+        
+        const arrayBuffer = new ArrayBuffer(bufferLength);
+        const view = new DataView(arrayBuffer);
+        
+        // WAV Header
+        const writeString = (offset: number, str: string) => {
+            for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        };
+        
+        writeString(0, 'RIFF');
+        view.setUint32(4, bufferLength - 8, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, format, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitDepth, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataLength, true);
+        
+        // Audio data
+        const channels: Float32Array[] = [];
+        for (let i = 0; i < numChannels; i++) {
+            channels.push(buffer.getChannelData(i));
+        }
+        
+        let offset = 44;
+        for (let i = 0; i < buffer.length; i++) {
+            for (let ch = 0; ch < numChannels; ch++) {
+                const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+                const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(offset, intSample, true);
+                offset += 2;
+            }
+        }
+        
+        return new Blob([arrayBuffer], { type: 'audio/wav' });
+    };
+
     const startRecording = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            mediaRecorderRef.current = mediaRecorder;
-            chunksRef.current = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunksRef.current.push(e.data);
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                } 
+            });
+            
+            streamRef.current = stream;
+            audioChunksRef.current = [];
+            isRecordingRef.current = true;
+            
+            // Créer un contexte audio pour capturer en WAV
+            const audioContext = new AudioContext({ sampleRate: 44100 });
+            audioContextRef.current = audioContext;
+            const source = audioContext.createMediaStreamSource(stream);
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            
+            processor.onaudioprocess = (e) => {
+                if (isRecordingRef.current) {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    audioChunksRef.current.push(new Float32Array(inputData));
+                }
             };
-
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                setRecordedBlob(blob);
-                if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-                setRecordedUrl(URL.createObjectURL(blob));
-                stream.getTracks().forEach(track => track.stop());
-            };
-
-            mediaRecorder.start();
+            
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+            
             setIsRecording(true);
             setRecordingTime(0);
             setError(null);
@@ -83,14 +154,51 @@ export default function VoiceCloning() {
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
         }
+        
+        // Petit délai pour s'assurer que le dernier chunk est capturé
+        setTimeout(() => {
+            const audioContext = audioContextRef.current;
+            const audioChunks = audioChunksRef.current;
+            const stream = streamRef.current;
+            
+            if (audioContext && audioChunks && audioChunks.length > 0) {
+                // Combiner tous les chunks
+                const totalLength = audioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+                const combinedData = new Float32Array(totalLength);
+                let offset = 0;
+                for (const chunk of audioChunks) {
+                    combinedData.set(chunk, offset);
+                    offset += chunk.length;
+                }
+                
+                // Créer un AudioBuffer
+                const audioBuffer = audioContext.createBuffer(1, combinedData.length, 44100);
+                audioBuffer.getChannelData(0).set(combinedData);
+                
+                // Convertir en WAV
+                const wavBlob = audioBufferToWav(audioBuffer);
+                setRecordedBlob(wavBlob);
+                
+                if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+                setRecordedUrl(URL.createObjectURL(wavBlob));
+                
+                // Nettoyer
+                audioContext.close();
+                audioContextRef.current = null;
+            }
+            
+            // Arrêter le stream
+            stream?.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+            audioChunksRef.current = [];
+        }, 100);
     };
 
     const clearRecording = () => {
@@ -125,9 +233,11 @@ export default function VoiceCloning() {
             if (audioSource instanceof File) {
                 formData.append('file', audioSource);
             } else {
-                formData.append('file', audioSource, 'recording.webm');
+                formData.append('file', audioSource, 'recording.wav');
             }
             formData.append('text', text);
+            formData.append('expressivity', expressivity.toString());
+            formData.append('model', selectedModel);
 
             const response = await fetch('/api/clone-voice', {
                 method: 'POST',
@@ -147,7 +257,6 @@ export default function VoiceCloning() {
 
     const hasAudioSample = inputMode === 'upload' ? !!voiceSample : !!recordedBlob;
     const canGenerate = hasAudioSample && text.trim().length > 0;
-
     return (
         <div className="container">
             <header className="page-header">
@@ -528,6 +637,108 @@ Exemple: Bonjour, je suis votre assistant virtuel créé par l'Institut National
                         }}>
                             <span>{text.length} caractères</span>
                             <span>~{Math.ceil(text.length / 150)} secondes d'audio</span>
+                        </div>
+
+                        {/* Expressivity Slider */}
+                        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontWeight: 600, fontSize: '14px' }}>🎭 Expressivité</span>
+                                <span style={{ 
+                                    background: 'rgba(59, 130, 246, 0.1)', 
+                                    padding: '4px 10px', 
+                                    borderRadius: '6px',
+                                    fontSize: '13px',
+                                    color: 'var(--primary)'
+                                }}>
+                                    {Math.round(expressivity * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0.25"
+                                max="1"
+                                step="0.05"
+                                value={expressivity}
+                                onChange={(e) => setExpressivity(parseFloat(e.target.value))}
+                                style={{
+                                    width: '100%',
+                                    height: '6px',
+                                    borderRadius: '3px',
+                                    cursor: 'pointer',
+                                    accentColor: 'var(--primary)'
+                                }}
+                            />
+                            <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                fontSize: '11px', 
+                                color: 'var(--text-muted)',
+                                marginTop: '4px'
+                            }}>
+                                <span>Naturel</span>
+                                <span>Expressif</span>
+                            </div>
+                        </div>
+
+                        {/* Model Selector */}
+                        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                            <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '10px' }}>🤖 Modèle IA</div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button
+                                    onClick={() => setSelectedModel('chatterbox-fr')}
+                                    style={{
+                                        flex: 1,
+                                        minWidth: '120px',
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        border: selectedModel === 'chatterbox-fr' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                                        background: selectedModel === 'chatterbox-fr' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                        color: selectedModel === 'chatterbox-fr' ? 'var(--primary)' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        textAlign: 'left'
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 600 }}>Chatterbox FR ⭐</div>
+                                    <div style={{ fontSize: '11px', opacity: 0.8 }}>🇫🇷 Français natif</div>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedModel('xtts')}
+                                    style={{
+                                        flex: 1,
+                                        minWidth: '120px',
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        border: selectedModel === 'xtts' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                                        background: selectedModel === 'xtts' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                        color: selectedModel === 'xtts' ? 'var(--primary)' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        textAlign: 'left'
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 600 }}>XTTS-v2</div>
+                                    <div style={{ fontSize: '11px', opacity: 0.8 }}>🌍 Multilingue</div>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedModel('chatterbox')}
+                                    style={{
+                                        flex: 1,
+                                        minWidth: '120px',
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        border: selectedModel === 'chatterbox' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                                        background: selectedModel === 'chatterbox' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                        color: selectedModel === 'chatterbox' ? 'var(--primary)' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        textAlign: 'left'
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 600 }}>Chatterbox EN</div>
+                                    <div style={{ fontSize: '11px', opacity: 0.8 }}>🇬🇧 Anglais</div>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
