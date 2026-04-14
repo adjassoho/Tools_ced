@@ -43,3 +43,6 @@ next-env.d.ts
 test-styletts*.js
 test-ppt*.js
 test-presentation.pptx
+
+# Large files
+*.zip
