@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthEmail, unauthorizedResponse } from '@/lib/auth-helpers';
+import { deductCredits } from '@/lib/credits';
 
 interface TPStructure {
     numero: number;
@@ -94,7 +96,7 @@ Retourne UNIQUEMENT un JSON valide avec cette structure exacte:
                 },
                 {
                     role: 'user',
-                    content: `Crée un TP pédagogique basé sur ce contenu de cours:\n\n${text.substring(0, 8000)}`
+                    content: `Crée un TP pédagogique basé sur ce contenu de cours:\n\n${text.substring(0, 5000)}`
                 }
             ],
             temperature: 0.7,
@@ -116,11 +118,33 @@ Retourne UNIQUEMENT un JSON valide avec cette structure exacte:
         throw new Error('Impossible de parser la réponse JSON');
     }
     
-    return JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    
+    // Robuste : échapper les retours à la ligne générés par Llama à l'intérieur des valeurs JSON
+    jsonStr = jsonStr.replace(/\\n/g, "\\n")
+               .replace(/\\'/g, "\\'")
+               .replace(/\\"/g, '\\"')
+               .replace(/\\&/g, "\\&")
+               .replace(/\\r/g, "\\r")
+               .replace(/\\t/g, "\\t")
+               .replace(/\\b/g, "\\b")
+               .replace(/\\f/g, "\\f");
+
+    jsonStr = jsonStr.replace(/[\u0000-\u0019]+/g, " "); 
+
+    try {
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("JSON parse failure in generate-tp:", jsonStr);
+        throw new Error("L'intelligence Artificielle a retourné un format invalide, veuillez réessayer avec un extrait plus court.");
+    }
 }
 
 export async function POST(req: NextRequest) {
     try {
+        const email = await getAuthEmail(req);
+        if (!email) return unauthorizedResponse();
+
         const formData = await req.formData();
         const file = formData.get('file') as File;
         const tpNumber = parseInt(formData.get('tpNumber') as string) || 1;
@@ -155,6 +179,12 @@ export async function POST(req: NextRequest) {
 
         if (!text || text.trim().length < 100) {
             return NextResponse.json({ error: 'Document trop court ou vide' }, { status: 400 });
+        }
+
+        try {
+            await deductCredits(email, 5);
+        } catch (creditError: any) {
+            return NextResponse.json({ error: creditError.message }, { status: 402 });
         }
 
         console.log('Text extracted:', text.length, 'chars');

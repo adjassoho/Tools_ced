@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthEmail, unauthorizedResponse } from '@/lib/auth-helpers';
+import { deductCredits } from '@/lib/credits';
 
 interface Section {
     title: string;
@@ -152,7 +154,7 @@ async function extractTextFromDocx(buffer: Buffer): Promise<string> {
 // Utiliser l'IA pour détecter la structure du document
 async function detectStructureWithAI(text: string, apiKey: string): Promise<Section[]> {
     // Limiter le texte pour l'API
-    const maxChars = 15000;
+    const maxChars = 5000; // Limite adaptée au plan Groq gratuit (6000 TPM)
     const truncatedText = text.length > maxChars ? text.substring(0, maxChars) : text;
     
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -208,7 +210,27 @@ Retourne UNIQUEMENT un JSON valide:
         throw new Error('No JSON found in response');
     }
     
-    const sections = JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    
+    // Robuste : échapper les retours à la ligne générés par Llama à l'intérieur des valeurs JSON
+    jsonStr = jsonStr.replace(/\\n/g, "\\n")
+               .replace(/\\'/g, "\\'")
+               .replace(/\\"/g, '\\"')
+               .replace(/\\&/g, "\\&")
+               .replace(/\\r/g, "\\r")
+               .replace(/\\t/g, "\\t")
+               .replace(/\\b/g, "\\b")
+               .replace(/\\f/g, "\\f");
+
+    jsonStr = jsonStr.replace(/[\u0000-\u0019]+/g, " "); 
+
+    let sections = [];
+    try {
+        sections = JSON.parse(jsonStr);
+    } catch(e) {
+        console.error("JSON parse failure in detectStructureWithAI:", jsonStr);
+        throw new Error("Erreur IA");
+    }
     
     // Post-traitement: nettoyer les titres trop longs
     return sections.map((s: { level?: number; title?: string; content?: string }) => {
@@ -560,7 +582,25 @@ IMPORTANT: Garde les titres EXACTS du document, ne les modifie pas.`
         throw new Error('No JSON found');
     }
     
-    const sections = JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    jsonStr = jsonStr.replace(/\\n/g, "\\n")
+               .replace(/\\'/g, "\\'")
+               .replace(/\\"/g, '\\"')
+               .replace(/\\&/g, "\\&")
+               .replace(/\\r/g, "\\r")
+               .replace(/\\t/g, "\\t")
+               .replace(/\\b/g, "\\b")
+               .replace(/\\f/g, "\\f");
+    jsonStr = jsonStr.replace(/[\u0000-\u0019]+/g, " "); 
+    
+    let sections = [];
+    try {
+        sections = JSON.parse(jsonStr);
+    } catch(e) {
+        console.error("JSON parse failure in detectStructureSimple:", jsonStr);
+        throw new Error("Erreur IA");
+    }
+    
     return sections.map((s: { level?: number; title?: string; content?: string }) => ({
         level: s.level || 1,
         title: s.title || 'Section',
@@ -731,6 +771,9 @@ function simpleSummarize(text: string): string {
 
 export async function POST(req: NextRequest) {
     try {
+        const email = await getAuthEmail(req);
+        if (!email) return unauthorizedResponse();
+
         const formData = await req.formData();
         const file = formData.get('file') as File;
         
@@ -759,6 +802,12 @@ export async function POST(req: NextRequest) {
         
         if (!text || text.trim().length < 100) {
             return NextResponse.json({ error: 'Le document est trop court ou vide' }, { status: 400 });
+        }
+
+        try {
+            await deductCredits(email, 5);
+        } catch (creditError: any) {
+            return NextResponse.json({ error: creditError.message }, { status: 402 });
         }
         
         console.log('Text extracted:', text.length, 'chars');

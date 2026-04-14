@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
+import { deductCredits } from '@/lib/credits';
 
 // Extraire le texte d'un PDF
 async function extractTextFromPdf(buffer: Buffer): Promise<string> {
@@ -97,7 +99,29 @@ Retourne un JSON:
         };
     }
     
-    return JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    
+    // Robuste : échapper les retours à la ligne générés par Llama à l'intérieur des valeurs JSON
+    jsonStr = jsonStr.replace(/\\n/g, "\\n")
+               .replace(/\\'/g, "\\'")
+               .replace(/\\"/g, '\\"')
+               .replace(/\\&/g, "\\&")
+               .replace(/\\r/g, "\\r")
+               .replace(/\\t/g, "\\t")
+               .replace(/\\b/g, "\\b")
+               .replace(/\\f/g, "\\f");
+
+    jsonStr = jsonStr.replace(/[\u0000-\u0019]+/g, " "); 
+
+    try {
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("JSON parse failure in generate-image:", jsonStr);
+        return {
+            prompt: "A beautiful African village scene with people, photorealistic",
+            title: "Scène locale"
+        };
+    }
 }
 
 
@@ -119,6 +143,14 @@ async function generateImageWithPollinations(prompt: string, width: number = 102
 
 export async function POST(req: NextRequest) {
     try {
+        // Lire le cookie directement depuis le NextRequest (fiable en Next.js 16)
+        const token = req.cookies.get('auth-jwt')?.value;
+        if (!token) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+        
+        const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_cedine_tools_2026_super_secure');
+        const { payload } = await jwtVerify(token, secret);
+        const email = payload.email as string;
+
         const formData = await req.formData();
         const file = formData.get('file') as File;
         const style = (formData.get('style') as string) || 'realistic';
@@ -154,6 +186,13 @@ export async function POST(req: NextRequest) {
 
         if (!text || text.trim().length < 50) {
             return NextResponse.json({ error: 'Document trop court ou vide' }, { status: 400 });
+        }
+
+        // Prélever 10 crédits AVANT de lancer la génération
+        try {
+            await deductCredits(email, 10);
+        } catch (creditError: any) {
+            return NextResponse.json({ error: creditError.message }, { status: 402 }); // 402 Payment Required
         }
 
         // Déterminer les dimensions selon le ratio

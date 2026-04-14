@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthEmail, unauthorizedResponse } from '@/lib/auth-helpers';
+import { deductCredits } from '@/lib/credits';
 
 interface QuizQuestion {
     question: string;
@@ -37,7 +39,7 @@ async function generateQuizWithGroq(
     numQuestions: number,
     difficulty: string
 ): Promise<QuizQuestion[]> {
-    const maxChars = 12000;
+    const maxChars = 5000; // Limite adaptée au plan Groq gratuit (6000 TPM)
     const truncatedText = text.length > maxChars ? text.substring(0, maxChars) : text;
     
     const difficultyPrompts: Record<string, string> = {
@@ -107,11 +109,33 @@ Retourne UNIQUEMENT un JSON valide avec ce format:
         throw new Error('No JSON found in response');
     }
     
-    return JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    
+    // Robuste : échapper les retours à la ligne générés par Llama à l'intérieur des valeurs JSON
+    jsonStr = jsonStr.replace(/\\n/g, "\\n")
+               .replace(/\\'/g, "\\'")
+               .replace(/\\"/g, '\\"')
+               .replace(/\\&/g, "\\&")
+               .replace(/\\r/g, "\\r")
+               .replace(/\\t/g, "\\t")
+               .replace(/\\b/g, "\\b")
+               .replace(/\\f/g, "\\f");
+
+    jsonStr = jsonStr.replace(/[\u0000-\u0019]+/g, " "); 
+
+    try {
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("JSON parse failure in generate-quiz:", jsonStr);
+        throw new Error("L'intelligence Artificielle a retourné un format invalide, veuillez réessayer avec un extrait plus court.");
+    }
 }
 
 export async function POST(req: NextRequest) {
     try {
+        const email = await getAuthEmail(req);
+        if (!email) return unauthorizedResponse();
+
         const formData = await req.formData();
         const file = formData.get('file') as File;
         const numQuestions = parseInt(formData.get('numQuestions') as string) || 10;
@@ -151,7 +175,13 @@ export async function POST(req: NextRequest) {
         if (!groqKey) {
             return NextResponse.json({ error: 'GROQ_API_KEY non configuré' }, { status: 500 });
         }
-        
+
+        try {
+            await deductCredits(email, 5);
+        } catch (creditError: any) {
+            return NextResponse.json({ error: creditError.message }, { status: 402 });
+        }
+
         // Générer le quiz
         const questions = await generateQuizWithGroq(text, groqKey, numQuestions, difficulty);
         
